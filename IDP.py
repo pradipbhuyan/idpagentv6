@@ -407,8 +407,7 @@ def extract_docx_text(file_path):
             if cells:
                 parts.append(" | ".join(cells))
 
-    return "
-".join(parts).strip()
+    return "\n".join(parts).strip()
 
 
 def process_file_with_fallback(uploaded_file):
