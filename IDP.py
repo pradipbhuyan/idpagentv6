@@ -560,7 +560,6 @@ def push_agent_log(message):
     st.session_state.agent_logs.append(message)
     refresh_live_batch_activity()
 
-
 def record_agent_event(step, status, message=""):
     now = time.time()
 
@@ -589,9 +588,10 @@ def record_agent_event(step, status, message=""):
         "status": status,
         "message": message,
     })
-    refresh_live_batch_activity()
 
+    refresh_live_batch_activity(force=status in ["done", "error"])
 
+    
 def refresh_live_batch_activity(force=False):
     now = time.time()
     last_refresh_at = st.session_state.get("last_ui_refresh_at", 0.0)
@@ -619,27 +619,26 @@ def refresh_live_batch_activity(force=False):
 
     if step_placeholder is not None:
         elapsed = st.session_state.get("batch_elapsed_seconds", 0.0)
-    
+
         if total_files > 0:
             elapsed_line = f"**Elapsed:** {elapsed:.2f} sec  " if elapsed > 0 else ""
-    
+
             step_placeholder.markdown(
                 f"""
-    #### Batch Progress
-    
-    **Current File:** {current_file or '-'}  
-    **Current Step:** {current_step}  
-    **Processed:** {processed_files} / {total_files}  
-    **Exceptions:** {exception_count}  
-    {elapsed_line}
-    """
+#### Batch Progress
+
+**Current File:** {current_file or '-'}  
+**Current Step:** {current_step}  
+**Processed:** {processed_files} / {total_files}  
+**Exceptions:** {exception_count}  
+{elapsed_line}
+"""
             )
         else:
             if current_step != "Waiting":
                 step_placeholder.markdown(f"#### Progress\n\n**Current Step:** {current_step}")
             else:
                 step_placeholder.empty()
-
 
     if progress_placeholder is not None:
         if total_files > 0 or per_file_progress > 0:
@@ -669,7 +668,7 @@ def refresh_live_batch_activity(force=False):
 
                     line = f"{icon} **{file_name}**"
                     if item.get("message"):
-                        line += f"\n {item.get('message')}"
+                        line += f"  \n{item.get('message')}"
                     content.append(line)
             else:
                 content.append("_No files started yet_")
@@ -690,7 +689,7 @@ def refresh_live_batch_activity(force=False):
 
                     line = f"{icon} **{event.get('step', '')}**"
                     if event.get("message"):
-                        line += f"\n {event.get('message')}"
+                        line += f"  \n{event.get('message')}"
                     content.append(line)
 
         event_placeholder.markdown("\n\n".join(content) if content else "")
@@ -890,7 +889,6 @@ def render_agent_pipeline():
 
     pipeline_placeholder.markdown("".join(html_parts), unsafe_allow_html=True)
 
-
 def update_batch_file_status(file_name, status, message=""):
     statuses = st.session_state.get("batch_file_statuses", [])
 
@@ -910,7 +908,7 @@ def update_batch_file_status(file_name, status, message=""):
         })
 
     st.session_state["batch_file_statuses"] = statuses
-    refresh_live_batch_activity()
+    refresh_live_batch_activity(force=status in ["done", "error"])
 
 
 def update_progress(percent, message):
@@ -2823,7 +2821,7 @@ if st.button("Process Batch", use_container_width=True, disabled=process_disable
                 st.session_state.batch_processed_files += 1
                 st.session_state["progress_value"] = 0
                 st.session_state["current_file_started_at"] = None
-                refresh_live_batch_activity()
+                refresh_live_batch_activity(force=True)
 
         if st.session_state.batch_results:
             load_batch_result_into_session(0)
@@ -2833,6 +2831,7 @@ if st.button("Process Batch", use_container_width=True, disabled=process_disable
             st.session_state.batch_elapsed_seconds = (
                 st.session_state.batch_completed_at - st.session_state.batch_started_at
             )
+            refresh_live_batch_activity(force=True)
             st.success("Batch processing completed")
 
 if source_mode in ["SharePoint", "OneDrive"]:
@@ -2917,7 +2916,7 @@ if st.session_state.get("show_reprocess_confirm"):
                     st.session_state.batch_processed_files += 1
                     st.session_state["progress_value"] = 0
                     st.session_state["current_file_started_at"] = None
-                    refresh_live_batch_activity()
+                    refresh_live_batch_activity(force=True)
 
             if st.session_state.batch_results:
                 load_batch_result_into_session(0)
@@ -2927,6 +2926,7 @@ if st.session_state.get("show_reprocess_confirm"):
                 st.session_state.batch_elapsed_seconds = (
                     st.session_state.batch_completed_at - st.session_state.batch_started_at
                 )
+                refresh_live_batch_activity(force=True)
                 st.success("Batch re-processing completed")
 
             st.session_state.show_reprocess_confirm = False
