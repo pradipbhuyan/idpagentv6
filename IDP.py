@@ -319,9 +319,7 @@ def extract_docx_text_from_bytes(file_bytes):
             if cells:
                 parts.append(" | ".join(cells))
 
-    return "
-".join(parts).strip()
-
+    return "\n".join(parts).strip()
 
 def extract_pptx_text_from_bytes(file_bytes):
     prs = Presentation(BytesIO(file_bytes))
@@ -330,9 +328,7 @@ def extract_pptx_text_from_bytes(file_bytes):
         for shape in slide.shapes:
             if hasattr(shape, "text") and shape.text and shape.text.strip():
                 text_parts.append(shape.text.strip())
-    return "
-".join(text_parts).strip()
-
+    return "\n".join(text_parts).strip()
 
 def extract_xlsx_text_from_bytes(file_bytes):
     excel_file = pd.ExcelFile(BytesIO(file_bytes))
@@ -341,10 +337,7 @@ def extract_xlsx_text_from_bytes(file_bytes):
         df = pd.read_excel(BytesIO(file_bytes), sheet_name=sheet)
         sheet_texts.append(f"Sheet: {sheet}")
         sheet_texts.append(df.to_string(index=False))
-    return "
-
-".join(sheet_texts).strip()
-
+    return "\n\n".join(sheet_texts).strip()
 
 def load_default_resume_template_bytes():
     possible_paths = [
