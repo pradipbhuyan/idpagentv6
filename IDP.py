@@ -1277,11 +1277,9 @@ def rank_all_resumes_against_jd():
 
 def compact_field(label, value):
     st.markdown(
-        f"**{label}**  
-<small>{value if value not in [None, ''] else '-'}</small>",
+        f"**{label}**  \n<small>{value if value not in [None, ''] else '-'}</small>",
         unsafe_allow_html=True
     )
-
 
 def safe_file_name(name: str, fallback: str = "file") -> str:
     name = str(name or fallback).strip()
