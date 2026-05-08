@@ -24,8 +24,6 @@ import streamlit as st
 from docx import Document as DocxDocument
 from pptx import Presentation
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
-
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
@@ -562,6 +560,7 @@ def push_agent_log(message):
     st.session_state.agent_logs.append(message)
     refresh_live_batch_activity()
 
+
 def record_agent_event(step, status, message=""):
     now = time.time()
 
@@ -590,10 +589,9 @@ def record_agent_event(step, status, message=""):
         "status": status,
         "message": message,
     })
+    refresh_live_batch_activity()
 
-    refresh_live_batch_activity(force=status in ["done", "error"])
 
-    
 def refresh_live_batch_activity(force=False):
     now = time.time()
     last_refresh_at = st.session_state.get("last_ui_refresh_at", 0.0)
@@ -621,26 +619,27 @@ def refresh_live_batch_activity(force=False):
 
     if step_placeholder is not None:
         elapsed = st.session_state.get("batch_elapsed_seconds", 0.0)
-
+    
         if total_files > 0:
             elapsed_line = f"**Elapsed:** {elapsed:.2f} sec  " if elapsed > 0 else ""
-
+    
             step_placeholder.markdown(
                 f"""
-#### Batch Progress
-
-**Current File:** {current_file or '-'}  
-**Current Step:** {current_step}  
-**Processed:** {processed_files} / {total_files}  
-**Exceptions:** {exception_count}  
-{elapsed_line}
-"""
+    #### Batch Progress
+    
+    **Current File:** {current_file or '-'}  
+    **Current Step:** {current_step}  
+    **Processed:** {processed_files} / {total_files}  
+    **Exceptions:** {exception_count}  
+    {elapsed_line}
+    """
             )
         else:
             if current_step != "Waiting":
                 step_placeholder.markdown(f"#### Progress\n\n**Current Step:** {current_step}")
             else:
                 step_placeholder.empty()
+
 
     if progress_placeholder is not None:
         if total_files > 0 or per_file_progress > 0:
@@ -670,7 +669,7 @@ def refresh_live_batch_activity(force=False):
 
                     line = f"{icon} **{file_name}**"
                     if item.get("message"):
-                        line += f"  \n{item.get('message')}"
+                        line += f"\n {item.get('message')}"
                     content.append(line)
             else:
                 content.append("_No files started yet_")
@@ -691,7 +690,7 @@ def refresh_live_batch_activity(force=False):
 
                     line = f"{icon} **{event.get('step', '')}**"
                     if event.get("message"):
-                        line += f"  \n{event.get('message')}"
+                        line += f"\n {event.get('message')}"
                     content.append(line)
 
         event_placeholder.markdown("\n\n".join(content) if content else "")
@@ -891,6 +890,7 @@ def render_agent_pipeline():
 
     pipeline_placeholder.markdown("".join(html_parts), unsafe_allow_html=True)
 
+
 def update_batch_file_status(file_name, status, message=""):
     statuses = st.session_state.get("batch_file_statuses", [])
 
@@ -910,7 +910,7 @@ def update_batch_file_status(file_name, status, message=""):
         })
 
     st.session_state["batch_file_statuses"] = statuses
-    refresh_live_batch_activity(force=status in ["done", "error"])
+    refresh_live_batch_activity()
 
 
 def update_progress(percent, message):
@@ -1435,321 +1435,6 @@ IDP"""
         smtp.starttls()
         smtp.login(sender_email, sender_password)
         smtp.send_message(msg)
-
-def build_worker_input(uploaded_file, template_bytes, api_key, model_choice):
-    return {
-        "file_name": uploaded_file.name,
-        "file_bytes": uploaded_file.getvalue(),
-        "template_bytes": template_bytes,
-        "api_key": api_key,
-        "model_choice": model_choice,
-    }
-
-
-def process_file_bytes_with_fallback(file_name, file_bytes):
-    suffix = Path(file_name).suffix.lower()
-
-    if suffix in [".png", ".jpg", ".jpeg"]:
-        mime_type = "image/jpeg" if suffix in [".jpg", ".jpeg"] else "image/png"
-        text = ocr_image_bytes_with_vlm(file_bytes, mime_type=mime_type)
-        return {
-            "documents": [Document(page_content=text)] if text else [],
-            "text": text,
-            "ocr_used": True,
-            "extraction_mode": "image_vlm_ocr",
-            "exception_reason": None if text else "OCR failed on image",
-        }
-
-    try:
-        if suffix == ".txt":
-            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-                tmp.write(file_bytes)
-                file_path = tmp.name
-
-            try:
-                docs = TextLoader(file_path, encoding="utf-8").load()
-            except Exception:
-                docs = TextLoader(file_path, encoding="cp1252").load()
-
-            text = "\n".join([d.page_content for d in docs]).strip()
-            return {
-                "documents": docs,
-                "text": text,
-                "ocr_used": False,
-                "extraction_mode": "plain_text",
-                "exception_reason": None,
-            }
-
-        if suffix == ".pdf":
-            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-                tmp.write(file_bytes)
-                file_path = tmp.name
-
-            pdf_result = extract_text_from_pdf_with_ocr_fallback(file_path)
-            docs = [Document(page_content=pdf_result["text"])] if pdf_result["text"] else []
-            return {
-                "documents": docs,
-                "text": pdf_result["text"],
-                "ocr_used": pdf_result["ocr_used"],
-                "extraction_mode": pdf_result["extraction_mode"],
-                "exception_reason": pdf_result["exception_reason"],
-            }
-
-        if suffix == ".docx":
-            text = extract_docx_text_from_bytes(file_bytes)
-            docs = [Document(page_content=text)] if text else []
-            return {
-                "documents": docs,
-                "text": text,
-                "ocr_used": False,
-                "extraction_mode": "docx_text",
-                "exception_reason": None if text else "No extractable text in DOCX",
-            }
-
-        if suffix == ".pptx":
-            text = extract_pptx_text_from_bytes(file_bytes)
-            docs = [Document(page_content=text)] if text else []
-            return {
-                "documents": docs,
-                "text": text,
-                "ocr_used": False,
-                "extraction_mode": "pptx_text",
-                "exception_reason": None if text else "No extractable text in PPTX",
-            }
-
-        if suffix == ".xlsx":
-            text = extract_xlsx_text_from_bytes(file_bytes)
-            docs = [Document(page_content=text)] if text else []
-            return {
-                "documents": docs,
-                "text": text,
-                "ocr_used": False,
-                "extraction_mode": "xlsx_text",
-                "exception_reason": None if text else "No extractable text in Excel",
-            }
-
-    except Exception as e:
-        return {
-            "documents": [],
-            "text": "",
-            "ocr_used": False,
-            "extraction_mode": "failed",
-            "exception_reason": str(e),
-        }
-
-    return {
-        "documents": [],
-        "text": "",
-        "ocr_used": False,
-        "extraction_mode": "unsupported",
-        "exception_reason": f"Unsupported file type: {suffix}",
-    }
-
-
-def process_single_file_worker(worker_input):
-    file_name = worker_input["file_name"]
-    file_bytes = worker_input["file_bytes"]
-    template_bytes = worker_input["template_bytes"]
-
-    try:
-        extracted = process_file_bytes_with_fallback(file_name, file_bytes)
-        full_text = extracted["text"]
-
-        if not full_text:
-            return {
-                "file_name": file_name,
-                "status": "Exception",
-                "doc_type": "unknown",
-                "ocr_used": extracted["ocr_used"],
-                "exception_reason": extracted["exception_reason"] or "No extractable text",
-                "review_data": {},
-                "validation": {},
-                "confidence": {},
-                "duplicate_info": {
-                    "is_duplicate": False,
-                    "match_file": None,
-                    "reason": None,
-                    "score": 0.0,
-                },
-                "auto_result": None,
-                "vectorstore": None,
-                "full_text": "",
-                "cost": 0.0,
-                "tokens": 0,
-                "agent_events": [],
-                "agent_timings": {},
-            }
-
-        graph = build_graph()
-
-        raw_result = graph.invoke({
-            "text": full_text,
-            "filename": file_name,
-            "template": template_bytes,
-            "progress": None,
-            "event_callback": None,
-            "ocr_used": extracted["ocr_used"],
-            "extraction_mode": extracted["extraction_mode"],
-            "exception_reason": extracted["exception_reason"],
-        })
-
-        normalized = normalize_graph_result(raw_result)
-        doc_type = normalized.get("doc_type")
-        result = normalized.get("result", {})
-        review_data = result.get("data") or normalized.get("structured_data") or {}
-
-        validation = normalized.get("validation") or validate_document_data(review_data, doc_type)
-        confidence = normalized.get("confidence") or build_confidence_map(review_data, doc_type)
-
-        exception_reason = classify_exception(
-            doc_type=doc_type,
-            text=full_text,
-            validation=validation,
-            confidence=confidence,
-            extraction_meta=extracted,
-        )
-
-        status = "Completed"
-        if exception_reason:
-            status = "Exception"
-        elif not validation.get("passed", True):
-            status = "Review Needed"
-
-        auto_result = {
-            "doc_type": doc_type,
-            "structured_data": normalized.get("structured_data"),
-            "result": result,
-            "metrics": {},
-            "step_metrics": normalized.get("step_metrics", []),
-            "ocr_used": extracted["ocr_used"],
-            "extraction_mode": extracted["extraction_mode"],
-        }
-
-        return {
-            "file_name": file_name,
-            "status": status,
-            "doc_type": doc_type,
-            "ocr_used": extracted["ocr_used"],
-            "exception_reason": exception_reason,
-            "review_data": review_data,
-            "validation": validation,
-            "confidence": confidence,
-            "duplicate_info": {
-                "is_duplicate": False,
-                "match_file": None,
-                "reason": None,
-                "score": 0.0,
-            },
-            "auto_result": auto_result,
-            "vectorstore": None,
-            "full_text": full_text,
-            "cost": 0.0,
-            "tokens": 0,
-            "agent_events": [],
-            "agent_timings": {},
-        }
-
-    except Exception as e:
-        return {
-            "file_name": file_name,
-            "status": "Exception",
-            "doc_type": "unknown",
-            "ocr_used": False,
-            "exception_reason": f"Unhandled error: {str(e)}",
-            "review_data": {},
-            "validation": {},
-            "confidence": {},
-            "duplicate_info": {
-                "is_duplicate": False,
-                "match_file": None,
-                "reason": None,
-                "score": 0.0,
-            },
-            "auto_result": None,
-            "vectorstore": None,
-            "full_text": "",
-            "cost": 0.0,
-            "tokens": 0,
-            "agent_events": [],
-            "agent_timings": {},
-        }
-
-
-def process_batch_parallel(uploaded_files, max_workers=4):
-    template_bytes = get_active_template_bytes()
-
-    worker_inputs = [
-        build_worker_input(
-            uploaded_file=f,
-            template_bytes=template_bytes,
-            api_key=st.session_state["api_key"],
-            model_choice=st.session_state.get("model_choice", "gpt-4o-mini"),
-        )
-        for f in uploaded_files
-    ]
-
-    futures = {}
-
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        for worker_input in worker_inputs:
-            file_name = worker_input["file_name"]
-            update_batch_file_status(file_name, "running", "Queued for parallel processing")
-            future = executor.submit(process_single_file_worker, worker_input)
-            futures[future] = file_name
-
-        for future in as_completed(futures):
-            file_name = futures[future]
-
-            try:
-                result = future.result()
-
-                result["duplicate_info"] = detect_duplicate_document(
-                    new_doc_type=result.get("doc_type"),
-                    new_data=result.get("review_data") or {},
-                    existing_results=st.session_state.get("batch_results", []),
-                )
-
-                st.session_state.batch_results.append(result)
-
-                if result.get("status") == "Exception":
-                    st.session_state.exception_queue.append(result)
-                    update_batch_file_status(
-                        file_name,
-                        "error",
-                        result.get("exception_reason", "Exception")
-                    )
-                elif result.get("status") == "Review Needed":
-                    update_batch_file_status(file_name, "done", "Review Needed")
-                else:
-                    update_batch_file_status(file_name, "done", "Completed")
-
-            except Exception as e:
-                error_result = {
-                    "file_name": file_name,
-                    "status": "Exception",
-                    "doc_type": "unknown",
-                    "ocr_used": False,
-                    "exception_reason": f"Unhandled future error: {str(e)}",
-                    "cost": 0.0,
-                    "tokens": 0,
-                    "duplicate_info": {
-                        "is_duplicate": False,
-                        "match_file": None,
-                        "reason": None,
-                        "score": 0.0,
-                    },
-                    "agent_events": [],
-                    "agent_timings": {},
-                }
-                st.session_state.batch_results.append(error_result)
-                st.session_state.exception_queue.append(error_result)
-                update_batch_file_status(file_name, "error", error_result["exception_reason"])
-
-            finally:
-                st.session_state.batch_processed_files += 1
-                st.session_state["progress_value"] = 0
-                st.session_state["current_file_started_at"] = None
-                refresh_live_batch_activity(force=True)
 
 
 # ------------------------------
@@ -3084,9 +2769,61 @@ if st.button("Process Batch", use_container_width=True, disabled=process_disable
             {"file_name": f.name, "status": "pending", "message": ""}
             for f in uploaded_files
         ]
-        refresh_live_batch_activity(force=True)
+        refresh_live_batch_activity()
 
-        process_batch_parallel(uploaded_files, max_workers=4)
+        for uploaded_file in uploaded_files:
+            try:
+                st.session_state["current_file_started_at"] = time.time()
+                st.session_state.batch_current_file = uploaded_file.name
+                update_batch_file_status(uploaded_file.name, "running", "Processing started")
+                refresh_live_batch_activity()
+
+                result = process_single_file(uploaded_file)
+                st.session_state.batch_results.append(result)
+
+                if result.get("status") == "Exception":
+                    st.session_state.exception_queue.append(result)
+                    update_batch_file_status(
+                        uploaded_file.name,
+                        "error",
+                        result.get("exception_reason", "Exception")
+                    )
+                elif result.get("status") == "Review Needed":
+                    update_batch_file_status(uploaded_file.name, "done", "Review Needed")
+                else:
+                    update_batch_file_status(
+                        uploaded_file.name,
+                        "done",
+                        result.get("status", "Completed")
+                    )
+
+            except Exception as e:
+                error_result = {
+                    "file_name": uploaded_file.name,
+                    "status": "Exception",
+                    "doc_type": "unknown",
+                    "ocr_used": False,
+                    "exception_reason": f"Unhandled error: {str(e)}",
+                    "cost": 0.0,
+                    "tokens": 0,
+                    "duplicate_info": {
+                        "is_duplicate": False,
+                        "match_file": None,
+                        "reason": None,
+                        "score": 0.0,
+                    },
+                    "agent_events": deepcopy(st.session_state.get("agent_events", [])),
+                    "agent_timings": deepcopy(st.session_state.get("agent_timings", {})),
+                }
+                st.session_state.batch_results.append(error_result)
+                st.session_state.exception_queue.append(error_result)
+                update_batch_file_status(uploaded_file.name, "error", f"Unhandled error: {str(e)}")
+
+            finally:
+                st.session_state.batch_processed_files += 1
+                st.session_state["progress_value"] = 0
+                st.session_state["current_file_started_at"] = None
+                refresh_live_batch_activity()
 
         if st.session_state.batch_results:
             load_batch_result_into_session(0)
@@ -3096,9 +2833,7 @@ if st.button("Process Batch", use_container_width=True, disabled=process_disable
             st.session_state.batch_elapsed_seconds = (
                 st.session_state.batch_completed_at - st.session_state.batch_started_at
             )
-            refresh_live_batch_activity(force=True)
             st.success("Batch processing completed")
-
 
 if source_mode in ["SharePoint", "OneDrive"]:
     st.info(
@@ -3120,7 +2855,7 @@ if st.session_state.get("show_reprocess_confirm"):
             st.session_state.batch_started_at = time.time()
             st.session_state.batch_completed_at = None
             st.session_state.batch_elapsed_seconds = 0.0
-        
+
             st.session_state.batch_total_files = len(uploaded_files or [])
             st.session_state.batch_processed_files = 0
             st.session_state.batch_current_file = None
@@ -3128,10 +2863,62 @@ if st.session_state.get("show_reprocess_confirm"):
                 {"file_name": f.name, "status": "pending", "message": ""}
                 for f in (uploaded_files or [])
             ]
-            refresh_live_batch_activity(force=True)
-        
-            process_batch_parallel((uploaded_files or []), max_workers=4)
-        
+            refresh_live_batch_activity()
+
+            for uploaded_file in (uploaded_files or []):
+                try:
+                    st.session_state["current_file_started_at"] = time.time()
+                    st.session_state.batch_current_file = uploaded_file.name
+                    update_batch_file_status(uploaded_file.name, "running", "Re-processing started")
+                    refresh_live_batch_activity()
+
+                    result = process_single_file(uploaded_file)
+                    st.session_state.batch_results.append(result)
+
+                    if result.get("status") == "Exception":
+                        st.session_state.exception_queue.append(result)
+                        update_batch_file_status(
+                            uploaded_file.name,
+                            "error",
+                            result.get("exception_reason", "Exception")
+                        )
+                    elif result.get("status") == "Review Needed":
+                        update_batch_file_status(uploaded_file.name, "done", "Review Needed")
+                    else:
+                        update_batch_file_status(
+                            uploaded_file.name,
+                            "done",
+                            result.get("status", "Completed")
+                        )
+
+                except Exception as e:
+                    error_result = {
+                        "file_name": uploaded_file.name,
+                        "status": "Exception",
+                        "doc_type": "unknown",
+                        "ocr_used": False,
+                        "exception_reason": f"Unhandled error: {str(e)}",
+                        "cost": 0.0,
+                        "tokens": 0,
+                        "duplicate_info": {
+                            "is_duplicate": False,
+                            "match_file": None,
+                            "reason": None,
+                            "score": 0.0,
+                        },
+                        "agent_events": deepcopy(st.session_state.get("agent_events", [])),
+                        "agent_timings": deepcopy(st.session_state.get("agent_timings", {})),
+                    }
+                    st.session_state.batch_results.append(error_result)
+                    st.session_state.exception_queue.append(error_result)
+                    update_batch_file_status(uploaded_file.name, "error", f"Unhandled error: {str(e)}")
+
+                finally:
+                    st.session_state.batch_processed_files += 1
+                    st.session_state["progress_value"] = 0
+                    st.session_state["current_file_started_at"] = None
+                    refresh_live_batch_activity()
+
             if st.session_state.batch_results:
                 load_batch_result_into_session(0)
                 st.session_state.batch_processed = True
@@ -3140,9 +2927,8 @@ if st.session_state.get("show_reprocess_confirm"):
                 st.session_state.batch_elapsed_seconds = (
                     st.session_state.batch_completed_at - st.session_state.batch_started_at
                 )
-                refresh_live_batch_activity(force=True)
                 st.success("Batch re-processing completed")
-        
+
             st.session_state.show_reprocess_confirm = False
             st.session_state.pending_batch_signature = None
             st.rerun()
