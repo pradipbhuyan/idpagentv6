@@ -669,8 +669,7 @@ def refresh_live_batch_activity(force=False):
 
                     line = f"{icon} **{file_name}**"
                     if item.get("message"):
-                        line += f"  
-{item.get('message')}"
+                        line += f"\n {item.get('message')}"
                     content.append(line)
             else:
                 content.append("_No files started yet_")
