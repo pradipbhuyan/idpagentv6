@@ -690,13 +690,10 @@ def refresh_live_batch_activity(force=False):
 
                     line = f"{icon} **{event.get('step', '')}**"
                     if event.get("message"):
-                        line += f"  
-{event.get('message')}"
+                        line += f"\n {event.get('message')}"
                     content.append(line)
 
-        event_placeholder.markdown("
-
-".join(content) if content else "")
+        event_placeholder.markdown("\n\n".join(content) if content else "")
 
     render_agent_pipeline()
 
