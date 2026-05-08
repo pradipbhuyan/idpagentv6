@@ -618,13 +618,13 @@ def refresh_live_batch_activity(force=False):
         overall_progress = per_file_progress
 
     if step_placeholder is not None:
-        elapsed = st.session_state.get("batch_elapsed_seconds", 0.0)
+    elapsed = st.session_state.get("batch_elapsed_seconds", 0.0)
 
-        if total_files > 0:
-            elapsed_line = f"**Elapsed:** {elapsed:.2f} sec  " if elapsed > 0 else ""
+    if total_files > 0:
+        elapsed_line = f"**Elapsed:** {elapsed:.2f} sec  " if elapsed > 0 else ""
 
-            step_placeholder.markdown(
-                f"""
+        step_placeholder.markdown(
+            f"""
 #### Batch Progress
 
 **Current File:** {current_file or '-'}  
@@ -633,14 +633,13 @@ def refresh_live_batch_activity(force=False):
 **Exceptions:** {exception_count}  
 {elapsed_line}
 """
-            )
+        )
+    else:
+        if current_step != "Waiting":
+            step_placeholder.markdown(f"#### Progress\n\n**Current Step:** {current_step}")
         else:
-            if current_step != "Waiting":
-                step_placeholder.markdown(f"#### Progress
+            step_placeholder.empty()
 
-**Current Step:** {current_step}")
-            else:
-                step_placeholder.empty()
 
     if progress_placeholder is not None:
         if total_files > 0 or per_file_progress > 0:
