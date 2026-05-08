@@ -444,8 +444,7 @@ def process_file_with_fallback(uploaded_file):
             except Exception:
                 docs = TextLoader(file_path, encoding="cp1252").load()
 
-            text = "
-".join([d.page_content for d in docs]).strip()
+            text = "\n".join([d.page_content for d in docs]).strip()
             result = {
                 "documents": docs,
                 "text": text,
