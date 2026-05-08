@@ -234,8 +234,7 @@ def extract_jd_text_from_upload(uploaded_file):
     try:
         if suffix == ".pdf":
             docs = PyPDFLoader(file_path).load()
-            return "
-".join(
+            return "\n".join(
                 [d.page_content for d in docs if getattr(d, "page_content", None)]
             ).strip()
 
@@ -248,7 +247,6 @@ def extract_jd_text_from_upload(uploaded_file):
 
     st.warning("Unsupported JD file type. Please upload PDF or DOCX.")
     return ""
-
 
 def reset_run_state():
     st.session_state["review_data"] = None
